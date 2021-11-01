@@ -68,6 +68,8 @@ You can either add entries to the default whitelist with ``--whitelist-extend`` 
 Both arguments expect a string of ``#`` separated regex strings (whitespaces are preserved). E.g. ``eradicate --whitelist "foo#b a r" filename``
 Those regex strings are matched case insensitive against the start of the comment itself.
 
+If you need to disable eradication for a block of code, you can do so by wrapping it with ``# eradicate: disable`` and ``# eradicate: enable``.
+
 For the default whitelist please see ``eradicate.py``.
 
 

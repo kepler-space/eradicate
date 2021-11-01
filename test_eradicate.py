@@ -217,7 +217,7 @@ class UnitTests(unittest.TestCase):
 
     def test_commented_out_code_line_numbers(self):
         self.assertEqual(
-            [1, 3],
+            [(eradicate.Eradicator.LineType.COMMENTED_OUT_CODE, x) for x in [1, 3]],
             list(eradicate.Eradicator().commented_out_code_line_numbers(
                 """\
 # print(5)
@@ -232,7 +232,7 @@ y = 1  # x = 3
 
     def test_commented_out_code_line_numbers_with_errors(self):
         self.assertEqual(
-            [1, 3],
+            [(eradicate.Eradicator.LineType.COMMENTED_OUT_CODE, x) for x in [1, 3]],
             list(eradicate.Eradicator().commented_out_code_line_numbers(
                 """\
 # print(5)
@@ -250,7 +250,7 @@ def foo():
 
     def test_commented_out_code_line_numbers_with_with_statement(self):
         self.assertEqual(
-            [1, 2],
+            [(eradicate.Eradicator.LineType.COMMENTED_OUT_CODE, x) for x in [1, 2]],
             list(eradicate.Eradicator().commented_out_code_line_numbers("""\
 # with open('filename', 'w') as out_file:
 #     json.dump(objects, out_file)
@@ -259,7 +259,7 @@ def foo():
 
     def test_commented_out_code_line_numbers_with_for_statement(self):
         self.assertEqual(
-            [1, 2],
+            [(eradicate.Eradicator.LineType.COMMENTED_OUT_CODE, x) for x in [1, 2]],
             list(eradicate.Eradicator().commented_out_code_line_numbers("""\
 # for x in y:
 #     oops = x.ham
@@ -352,6 +352,33 @@ y = 1  # x = 3
 
 #    def get_prop(self):
 #        return self.prop
+""")))
+
+    def test_disable_enable(self):
+        eradicator = eradicate.Eradicator()
+        self.assertEqual(
+            """\
+# This is a comment.
+
+y = 1  # x = 3
+
+# eradicate: disable
+# x = y + 2
+# eradicate: enable
+a = 1
+""",
+            ''.join(eradicate.Eradicator().filter_commented_out_code(
+                """\
+# This is a comment.
+
+y = 1  # x = 3
+# z = 4
+
+# eradicate: disable
+# x = y + 2
+# eradicate: enable
+# z = x - 4
+a = 1
 """)))
 
     def test_detect_encoding_with_bad_encoding(self):

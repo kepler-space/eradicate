@@ -25,6 +25,7 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 import difflib
+import enum
 import io
 import os
 import re
@@ -44,6 +45,7 @@ class Eradicator(object):
     PARTIAL_DICTIONARY_REGEX = re.compile(r'^\s*[\'"]\w+[\'"]\s*:.+[,{]\s*$')
     PRINT_RETURN_REGEX = re.compile(r'^(print|return)\b\s*')
     WITH_STATEMENT_REGEX = re.compile(r"with .+ as [a-zA-Z_][a-zA-Z0-9_]*:$")
+    ERADICATE_ENABLE_BLOCK_REGEX = re.compile(r'\beradicate:\s*(enable|disable)\b')
 
     CODE_INDICATORS = ['(', ')', '[', ']', '{', '}', ':', '=', '%',
                        'print', 'return', 'break', 'continue', 'import']
@@ -62,6 +64,11 @@ class Eradicator(object):
         r'XXX'
     )
     WHITELIST_REGEX = re.compile(r'|'.join(DEFAULT_WHITELIST), flags=re.IGNORECASE)
+
+    class LineType(enum.Enum):
+        COMMENTED_OUT_CODE = 0
+        ENABLE = 1
+        DISABLE = 2
 
     def comment_contains_code(self, line, aggressive=True):
         """Return True comment contains code."""
@@ -145,7 +152,7 @@ class Eradicator(object):
 
 
     def commented_out_code_line_numbers(self, source, aggressive=True):
-        """Yield line numbers of commented-out code."""
+        """Yield line numbers of commented-out code and enable/disable blocks."""
         sio = io.StringIO(source)
         try:
             for token in tokenize.generate_tokens(sio.readline):
@@ -153,23 +160,41 @@ class Eradicator(object):
                 start_row = token[2][0]
                 line = token[4]
 
-                if (token_type == tokenize.COMMENT and
-                        line.lstrip().startswith('#') and
-                        self.comment_contains_code(line, aggressive)):
-                    yield start_row
+                if token_type == tokenize.COMMENT and line.lstrip().startswith('#'):
+                    if self.comment_contains_code(line, aggressive):
+                        yield (Eradicator.LineType.COMMENTED_OUT_CODE, start_row)
+                    block_change = self.ERADICATE_ENABLE_BLOCK_REGEX.search(line)
+                    if block_change:
+                        if block_change.group(1) == "enable":
+                            # We want to preserve this line, so re-enable from the next line.
+                            yield (Eradicator.LineType.ENABLE, start_row + 1)
+                        elif block_change.group(1) == "disable":
+                            yield (Eradicator.LineType.DISABLE, start_row)
         except (tokenize.TokenError, IndentationError):
             pass
 
 
     def filter_commented_out_code(self, source, aggressive=True):
         """Yield code with commented out code removed."""
-        marked_lines = list(self.commented_out_code_line_numbers(source,
+        marked_result = list(self.commented_out_code_line_numbers(source,
                                                             aggressive))
+        marked_lines = set([x[1] for x in marked_result if x[0] == Eradicator.LineType.COMMENTED_OUT_CODE])
+        enable_lines = set([x[1] for x in marked_result if x[0] == Eradicator.LineType.ENABLE])
+        disable_lines = set([x[1] for x in marked_result if x[0] == Eradicator.LineType.DISABLE])
         sio = io.StringIO(source)
+        enabled = True
         previous_line = ''
         for line_number, line in enumerate(sio.readlines(), start=1):
-            if (line_number not in marked_lines or
+            if line_number in disable_lines:
+                enabled = False
+            elif line_number in enable_lines:
+                enabled = True
+
+            if enabled:
+                if (line_number not in marked_lines or
                     previous_line.rstrip().endswith('\\')):
+                    yield line
+            else:
                 yield line
             previous_line = line
 
